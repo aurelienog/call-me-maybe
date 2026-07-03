@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 
 from .parser import create_parser
-
+from .models import FunctionRegistry
 
 def validate_paths(input_path: Path, output_path: Path) -> None:
     if not input_path.exists():
@@ -18,6 +18,7 @@ def validate_paths(input_path: Path, output_path: Path) -> None:
 def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
+    registry = FunctionRegistry()
 
     try:
         validate_paths(args.input, args.output)
@@ -30,10 +31,19 @@ def main() -> None:
         return
 
     try:
-        data = json.loads(content)
+        with open("functions.json") as f:
+            functions_data = json.load(f)
     except json.JSONDecodeError:
         print("Invalid JSON")
         return
+
+    try:
+        with open("function_calling_tests.json") as f:
+            calling_tests_data = json.load(f)
+    except json.JSONDecodeError:
+        print("Invalid JSON")
+        return
+
 
     # args.output.parent.mkdir(parents=True, exist_ok=True)
     # args.output.write_text(result, encoding="utf-8")
