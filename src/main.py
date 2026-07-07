@@ -1,64 +1,57 @@
-from pathlib import Path
 import json
+from pydantic import ValidationError    # type: ignore
 
-from .parser import create_parser
-from .models import FunctionRegistry
-
-def validate_paths(input_path: Path, output_path: Path) -> None:
-    if not input_path.exists():
-        raise ValueError(f"Input file not found: {input_path}")
-
-    if input_path.is_dir():
-        raise ValueError(f"Input path is a directory: {input_path}")
-
-    if output_path.exists() and output_path.is_dir():
-        raise ValueError(f"Output path cannot be a directory: {output_path}")
+from .utils import validate_existing_file, validate_output_file, load_json, save_json
+from .parser import parse
+from .models import FunctionRegistry, FunctionDefinition, Prompt
 
 
 def main() -> None:
-    parser = create_parser()
-    args = parser.parse_args()
+    args = parse()
     registry = FunctionRegistry()
 
     try:
-        validate_paths(args.input, args.output)
-        content = args.input.read_text(encoding="utf-8")
+        validate_existing_file(args.functions_definition)
+        validate_existing_file(args.input)
+        validate_output_file(args.output)
+
+        functions_data = load_json(args.functions_definition)
+        functions = FunctionDefinition.validate_many(functions_data)
+        registry.load(functions)
+
+        prompts_data = load_json(args.input)
+        prompts = Prompt.validate_many(prompts_data)
+
     except ValueError as e:
         print(f"[ERROR] {e}")
         return
+
     except OSError as e:
         print(f"[SYSTEM ERROR] {e}")
         return
 
-    try:
-        with open("functions.json") as f:
-            functions_data = json.load(f)
-    except json.JSONDecodeError:
-        print("Invalid JSON")
+    except json.JSONDecodeError as e:
+        print(f"[INVALID JSON] {e}")
+        return
+
+    except ValidationError as e:
+        print("[VALIDATION ERROR]")
+        print("The input JSON does not match the expected schema.")
+        print(e)
         return
 
     try:
-        with open("function_calling_tests.json") as f:
-            calling_tests_data = json.load(f)
-    except json.JSONDecodeError:
-        print("Invalid JSON")
-        return
+        results = process(prompts, registry)
+        save_json(args.output, results)
 
+    except Exception as e:
+        print(f"[PROCESS ERROR] {e}")
 
-    # args.output.parent.mkdir(parents=True, exist_ok=True)
-    # args.output.write_text(result, encoding="utf-8")
-    return
+    except OSError as e:
+        print(f"[SYSTEM ERROR] {e}")
 
-
-args.input.exists()
-args.input.is_file()
-
-with args.input.open() as file:
-    ...
-
-
-with args.output.open("w") as file:
-    ...
 
 if __name__ == "__main__":
     main()
+
+# logits = model.get_logits_from_input_ids(...)

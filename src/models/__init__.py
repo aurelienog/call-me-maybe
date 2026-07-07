@@ -1,5 +1,4 @@
-from .function_registry import FunctionRegistry
-from .function import FunctionDefinition
+from .function import FunctionDefinition, ParameterDefinition
 from .prompt import Prompt
 from .types import JsonType
 

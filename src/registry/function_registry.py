@@ -1,6 +1,5 @@
-from .function import FunctionDefinition
-from .parameter import ParameterDefinition, ReturnDefinition
-from .types import JsonType
+from ..models import FunctionDefinition, ParameterDefinition, JsonType
+
 
 class FunctionRegistry:
     """
