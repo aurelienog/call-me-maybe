@@ -1,9 +1,11 @@
 import json
 from pydantic import ValidationError    # type: ignore
 
-from .utils import validate_existing_file, validate_output_file, load_json, save_json
+from .utils import (validate_existing_file, validate_output_file,
+                    load_json, save_json)
 from .parser import parse
-from .models import FunctionRegistry, FunctionDefinition, Prompt
+from .models import FunctionDefinition, Prompt
+from .registry import FunctionRegistry
 
 
 def main() -> None:
@@ -22,16 +24,16 @@ def main() -> None:
         prompts_data = load_json(args.input)
         prompts = Prompt.validate_many(prompts_data)
 
-    except ValueError as e:
-        print(f"[ERROR] {e}")
-        return
-
     except OSError as e:
         print(f"[SYSTEM ERROR] {e}")
         return
 
     except json.JSONDecodeError as e:
         print(f"[INVALID JSON] {e}")
+        return
+
+    except ValueError as e:
+        print(f"[ERROR] {e}")
         return
 
     except ValidationError as e:
@@ -44,11 +46,11 @@ def main() -> None:
         results = process(prompts, registry)
         save_json(args.output, results)
 
-    except Exception as e:
-        print(f"[PROCESS ERROR] {e}")
-
     except OSError as e:
         print(f"[SYSTEM ERROR] {e}")
+
+    except Exception as e:
+        print(f"[PROCESS ERROR] {e}")
 
 
 if __name__ == "__main__":

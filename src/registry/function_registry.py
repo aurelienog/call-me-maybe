@@ -1,7 +1,9 @@
 from ..models import FunctionDefinition, ParameterDefinition, JsonType
 
+from pydantic import BaseModel, ConfigDict, Field    # type: ignore
 
-class FunctionRegistry:
+
+class FunctionRegistry(BaseModel):
     """
     Registry of available function definitions.
 
@@ -13,16 +15,9 @@ class FunctionRegistry:
     The registry is used by the constrained decoder to validate
     function calls against the available function definitions.
     """
+    model_config = ConfigDict(extra="forbid")
 
-    def __init__(self):
-        """
-        Initialize an empty function registry.
-
-        The registry stores function definitions indexed by their
-        unique function names, allowing efficient lookups during
-        constrained decoding.
-        """
-        self._functions: dict[str, FunctionDefinition] = {}
+    functions: dict[str, FunctionDefinition] = Field(default_factory=dict)
 
     def load(self, functions: list[FunctionDefinition]) -> None:
         """
@@ -39,7 +34,7 @@ class FunctionRegistry:
         """
         for function in functions:
             self.add(function)
-    
+
     def add(self, function: FunctionDefinition) -> None:
         """
         Add a single function definition to the registry.
@@ -54,7 +49,7 @@ class FunctionRegistry:
         if self.exists(function.name):
             raise ValueError(f"Function '{function.name}' already exists.")
 
-        self._functions[function.name] = function
+        self.functions[function.name] = function
 
     def get(self, name: str) -> FunctionDefinition:
         """
@@ -69,7 +64,7 @@ class FunctionRegistry:
         Raises:
             KeyError: If the function does not exist.
         """
-        return self._functions[name]
+        return self.functions[name]
 
     def exists(self, name: str) -> bool:
         """
@@ -81,7 +76,7 @@ class FunctionRegistry:
         Returns:
             True if the function exists, False otherwise.
         """
-        return name in self._functions
+        return name in self.functions
 
     def function_names(self) -> list[str]:
         """
@@ -90,7 +85,7 @@ class FunctionRegistry:
         Returns:
             A list containing the name of every registered function.
         """
-        return list(self._functions.keys())
+        return list(self.functions.keys())
 
     def parameters(self, name: str) -> dict[str, ParameterDefinition]:
         """
@@ -107,7 +102,10 @@ class FunctionRegistry:
         """
         return self.get(name).parameters
 
-    def parameter_type(self, function_name: str, parameter_name: str) -> JsonType:
+    def parameter_type(self,
+                       function_name: str,
+                       parameter_name: str
+                       ) -> JsonType:
         """
         Return the expected type of a function parameter.
 

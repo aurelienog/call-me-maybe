@@ -18,7 +18,8 @@ def save_json(path: Path, data) -> None:
 
 # save_results()
 
-# For each prompt, add a JSON object to this file. Each object in the array must contain
+# For each prompt, add a JSON object to this file. Each object in the array
+# must contain
 # exactly the following keys:
 # • prompt (string): The original natural-language request
 # • name (string): The name of the function to call

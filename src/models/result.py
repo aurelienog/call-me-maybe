@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict    # type: ignore
 
 from .types import ParameterValue
 
+
 class FunctionCallResult(BaseModel):
     """
     Represents the predicted function call for a prompt.
