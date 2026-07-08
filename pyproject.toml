@@ -1,12 +1,15 @@
 [project]
 name = "call-me-maybe"
-version = "0.1.0"
+version = "1.0.0"
 description = "Introduction to function calling in LLMs"
+authors = [{name = "aunoguei"}]
 requires-python = ">=3.10"
 
 dependencies = [
     "numpy",
     "pydantic",
+    "torch",
+    "llm-sdk",
 ]
 
 [dependency-groups]
@@ -15,6 +18,9 @@ dev = [
     "mypy",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.flake8]
+exclude = ["__pycache__", ".venv", "llm_sdk", ".mypy_cache"]
+
+[tool.mypy]
+exclude = ["__pycache__", ".venv", "llm_sdk"]
+disable_error_code = ["import-untyped"]

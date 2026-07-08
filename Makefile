@@ -30,6 +30,14 @@ clean:
 	find . -type d -name ".mypy_cache" -exec rm -rf {} +
 
 # --------------------------
+# FCLEAN
+# --------------------------
+
+fclean: clean
+	@rm -rf .venv
+	@echo "💣 Virtual environment removed"
+
+# --------------------------
 # LINT
 # --------------------------
 
@@ -45,4 +53,4 @@ lint-strict:
 # PHONY
 # --------------------------
 
-.PHONY: all install run debug clean lint lint-strict
+.PHONY: all install run debug fclean clean lint lint-strict
