@@ -1,6 +1,12 @@
-from ..models import FunctionDefinition, ParameterDefinition, JsonType
+from . import FunctionDefinition, ParameterDefinition, JsonType
 
 from pydantic import BaseModel, ConfigDict, Field    # type: ignore
+
+# @model_validator(mode="after")
+# def validate_business_rules(self) -> "FunctionRegistry":
+#     ... que no tenga string vacios
+
+# registry.model_dump_json() para comprobar?
 
 
 class FunctionRegistry(BaseModel):
