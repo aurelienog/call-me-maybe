@@ -34,7 +34,7 @@ clean:
 # --------------------------
 
 fclean: clean
-	@rm -rf .venv
+	rm -rf .venv
 	@echo "💣 Virtual environment removed"
 
 # --------------------------
