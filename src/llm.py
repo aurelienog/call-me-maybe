@@ -1,8 +1,10 @@
 from llm_sdk.llm_sdk import Small_LLM_Model     # type: ignore
 import numpy as np    # type: ignore
 
+from pydantic import BaseModel, Field, ConfigDict
 
-class LLM():
+
+class Llm(BaseModel):
     """
     Wrapper around the provided LLM SDK.
 
@@ -12,14 +14,14 @@ class LLM():
     with standard Python types and NumPy arrays, without depending on
     the SDK's internal tensor representation.
     """
-    def __init__(self):
-        """
-        Initialize the language model.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model: Small_LLM_Model = Field(default_factory=Small_LLM_Model)
+    cache: dict[str, list[int]] = Field(default_factory=dict)
 
-        Loads the LLM provided by the SDK and prepares it for
-        tokenization and inference.
-        """
-        self.model = Small_LLM_Model()
+    def token_ids(self, text: str) -> list[int]:
+        if text not in self.cache:
+            self.cache[text] = self.encode(text)
+        return self.cache[text]
 
     def encode(self, text: str) -> list[int]:
         """
@@ -37,7 +39,7 @@ class LLM():
             A list of integer token IDs representing the input text.
         """
         ids = self.model.encode(text)
-        return [int(id) for id in ids[0]]
+        return [int(token_id) for token_id in ids[0]]
 
     def decode(self, ids: list[int]) -> str:
         """
