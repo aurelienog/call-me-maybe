@@ -1,7 +1,8 @@
 from llm_sdk.llm_sdk import Small_LLM_Model     # type: ignore
 import numpy as np    # type: ignore
-
 from pydantic import BaseModel, Field, ConfigDict
+
+from .utils import load_json
 
 
 class Llm(BaseModel):
@@ -16,12 +17,18 @@ class Llm(BaseModel):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
     model: Small_LLM_Model = Field(default_factory=Small_LLM_Model)
-    cache: dict[str, list[int]] = Field(default_factory=dict)
+    token_to_id: dict[str, int] = Field(default_factory=dict)
+    id_to_token: dict[int, str] = Field(default_factory=dict)
 
-    def token_ids(self, text: str) -> list[int]:
-        if text not in self.cache:
-            self.cache[text] = self.encode(text)
-        return self.cache[text]
+    def model_post_init(self, _: object) -> None:
+        """Load the tokenizer vocabulary once."""
+        vocab_path = self.model.get_path_to_vocab_file()
+        self.token_to_id = load_json(vocab_path)
+
+        self.id_to_token = {
+            token_id: token
+            for token, token_id in self.token_to_id.items()
+        }
 
     def encode(self, text: str) -> list[int]:
         """
@@ -70,4 +77,19 @@ class Llm(BaseModel):
             the model vocabulary.
         """
         logits = self.model.get_logits_from_input_ids(input_ids)
-        return np.array(logits)
+        return np.asarray(logits, dtype=np.float32)
+
+    def token_from_id(self, token_id: int) -> str:
+        """
+        Return the string corresponding to a token ID.
+        """
+        return self.id_to_token[token_id]
+
+    @staticmethod
+    def normalize(token: str) -> str:
+        return (
+            token
+            .replace("▁", " ")
+            .replace("Ġ", " ")
+            .lstrip()
+        )
