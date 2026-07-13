@@ -80,7 +80,14 @@ class ConstrainedDecoder(BaseModel):
             generated_tokens.append(next_token)
             partial_text += self.llm.normalize(self.llm.token(next_token))
 
+            visited_in_step = set()
             while True:
+                current_checkpoint = (state, partial_text)
+                if current_checkpoint in visited_in_step:
+                    break
+                
+                visited_in_step.add(current_checkpoint)
+
                 new_state, partial_text = self._consume(
                     state,
                     partial_text,
