@@ -47,6 +47,7 @@ def parse_string(
 
 def parse_number(
     text: str,
+    is_generating: bool = False,
     ) -> tuple[ConsumeResult, str]:
     """
     Parse a JSON number.
@@ -58,7 +59,7 @@ def parse_number(
 
     while (
         end < len(text)
-        and text[end] not in ",}"
+        and text[end] not in ", \t\n}"
     ):
         end += 1
 
@@ -71,15 +72,16 @@ def parse_number(
     try:
         float(number)
 
-        # Puede ser un prefijo aunque float() lo acepte
         if number.endswith((".", "e", "E", "+", "-")):
+            return ConsumeResult.PREFIX, text
+        
+        if is_generating and not remaining:
             return ConsumeResult.PREFIX, text
 
         return ConsumeResult.COMPLETE, remaining
 
     except ValueError:
 
-        # Prefijos válidos de un número JSON
         if (
             number == "-"
             or number.endswith((".", "e", "E", "e+", "e-", "E+", "E-"))

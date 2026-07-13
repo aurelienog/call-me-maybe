@@ -339,7 +339,10 @@ class ConstrainedDecoder(BaseModel):
         allowed = set()
 
         for token_id, candidate in self._candidate_tokens(partial_text):
-            result, _ = parser(candidate)
+            if parser.__name__ == "parse_number":
+                result, _ = parser(candidate, is_generating=True)
+            else:
+                result, _ = parser(candidate)
 
             if result != ConsumeResult.INVALID:
                 allowed.add(token_id)
