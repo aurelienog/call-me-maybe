@@ -1,45 +1,12 @@
-from .models import Prompt, FunctionRegistry, FunctionCallResult
-from .llm import Llm
+from ..models import Prompt, FunctionRegistry, FunctionCallResult
+from ..llm import Llm
+from .json_parser import parse_boolean, parse_number, parse_string
+from .state import ConsumeResult, DecoderState
 
 import json
+from typing import Iterator
 from pydantic import BaseModel, Field
 import numpy as np
-
-
-from enum import Enum
-
-
-class ConsumeResult(Enum):
-    INVALID = 0
-    PREFIX = 1
-    COMPLETE = 2
-
-
-class DecoderState(Enum):
-    START = 0
-
-    EXPECT_OPEN_BRACE = 1
-
-    EXPECT_NAME_KEY = 2
-    EXPECT_NAME_COLON = 3
-    EXPECT_FUNCTION_NAME = 4
-
-    EXPECT_COMMA = 5
-
-    EXPECT_PARAMETERS_KEY = 6
-    EXPECT_PARAMETERS_COLON = 7
-    EXPECT_PARAMETERS_OPEN = 8
-
-    EXPECT_PARAMETER_NAME = 9
-    EXPECT_PARAMETER_COLON = 10
-    EXPECT_PARAMETER_VALUE = 11
-
-    EXPECT_PARAMETER_SEPARATOR = 12
-
-    EXPECT_CLOSE_PARAMETERS = 13
-    EXPECT_CLOSE_OBJECT = 14
-
-    FINISHED = 15
 
 
 class ConstrainedDecoder(BaseModel):
@@ -107,7 +74,7 @@ class ConstrainedDecoder(BaseModel):
         while state != DecoderState.FINISHED:
             logits = self.llm.get_logits(tokens)
             allowed = self._allowed_tokens(state, partial_text)
-            masked = self._mask_logits(logits, list(allowed))
+            masked = self._mask_logits(logits, allowed)
             next_token = self._select_next_token(masked)
             tokens.append(next_token)
             generated_tokens.append(next_token)
@@ -124,7 +91,7 @@ class ConstrainedDecoder(BaseModel):
 
         return generated_tokens
 
-    def _candidate_tokens(self, partial_text):
+    def _candidate_tokens(self, partial_text) -> Iterator[tuple[int, str]]:
 
         for token_id, token in self.llm.id_to_token.items():
             token = self.llm.normalize(token)
@@ -188,7 +155,7 @@ class ConstrainedDecoder(BaseModel):
 
         raise ValueError(f"Unexpected decoder state: {state}")
 
-    def _mask_logits(self, logits: np.ndarray, allowed_tokens: list[int]
+    def _mask_logits(self, logits: np.ndarray, allowed_tokens: set[int]
                      ) -> np.ndarray:
         masked = logits.copy()
 
@@ -335,111 +302,6 @@ class ConstrainedDecoder(BaseModel):
 
         raise ValueError(f"Unexpected decoder state: {state}")
 
-    def _parse_string(
-        self,
-        text: str,
-    ) -> tuple[ConsumeResult, str]:
-        """
-        Parse a JSON string.
-
-        Returns:
-            (result, remaining)
-
-            INVALID:
-                `text` cannot become a valid JSON string.
-
-            PREFIX:
-                `text` is a valid prefix of a JSON string but is not complete.
-
-            COMPLETE:
-                A complete JSON string was parsed. The returned `remaining`
-                contains the unconsumed suffix.
-        """
-        if not text.startswith('"'):
-            return ConsumeResult.INVALID, text
-
-        escaped = False
-
-        for i in range(1, len(text)):
-            c = text[i]
-
-            if escaped:
-                escaped = False
-                continue
-
-            if c == "\\":
-                escaped = True
-                continue
-
-            if c == '"':
-                return (
-                    ConsumeResult.COMPLETE,
-                    text[i + 1:],
-                )
-
-        return ConsumeResult.PREFIX, text
-
-    def _parse_number(
-        self,
-        text: str,
-    ) -> tuple[ConsumeResult, str]:
-        """
-        Parse a JSON number.
-
-        Returns:
-            (result, remaining)
-        """
-        end = 0
-
-        while (
-            end < len(text)
-            and text[end] not in ",}"
-        ):
-            end += 1
-
-        number = text[:end]
-        remaining = text[end:]
-
-        if not number:
-            return ConsumeResult.INVALID, text
-
-        try:
-            float(number)
-
-            # Puede ser un prefijo aunque float() lo acepte
-            if number.endswith((".", "e", "E", "+", "-")):
-                return ConsumeResult.PREFIX, text
-
-            return ConsumeResult.COMPLETE, remaining
-
-        except ValueError:
-
-            # Prefijos válidos de un número JSON
-            if (
-                number == "-"
-                or number.endswith((".", "e", "E", "e+", "e-", "E+", "E-"))
-            ):
-                return ConsumeResult.PREFIX, text
-
-            return ConsumeResult.INVALID, text
-
-    def _parse_boolean(
-        self,
-        text: str,
-    ) -> tuple[ConsumeResult, str]:
-
-        for literal in ("true", "false"):
-
-            if literal.startswith(text):
-                if text == literal:
-                    return ConsumeResult.COMPLETE, ""
-                return ConsumeResult.PREFIX, text
-
-            if text.startswith(literal):
-                return ConsumeResult.COMPLETE, text[len(literal):]
-
-        return ConsumeResult.INVALID, text
-
     def _parse_parameter_value(
         self,
         remaining: str,
@@ -450,23 +312,23 @@ class ConstrainedDecoder(BaseModel):
         Returns:
             (result, remaining)
         """
-        parameter = self.registry.parameter(
-            self.current_function,
-            self.current_parameter,
-        )
+        parameter_type = self.registry.parameter_type(
+                self.current_function,
+                self.current_parameter
+            )
 
-        match parameter.type:
+        match parameter_type:
 
             case "string":
-                return self._parse_string(remaining)
+                return parse_string(remaining)
 
             case "number":
-                return self._parse_number(remaining)
+                return parse_number(remaining)
 
             case "boolean":
-                return self._parse_boolean(remaining)
+                return parse_boolean(remaining)
 
-        raise ValueError(f"Unknown parameter type: {parameter.type}")
+        raise ValueError(f"Unknown parameter type: {parameter_type}")
 
     def _allowed_from_parser(
         self,
@@ -620,11 +482,11 @@ class ConstrainedDecoder(BaseModel):
 
             match parameter_type:
                 case "string":
-                    parser = self._parse_string
+                    parser = parse_string
                 case "number":
-                    parser = self._parse_number
+                    parser = parse_number
                 case "boolean":
-                    parser = self._parse_boolean
+                    parser = parse_boolean
                 case _:
                     raise ValueError(
                         f"Unsupported parameter type: {parameter_type}"
@@ -655,36 +517,3 @@ class ConstrainedDecoder(BaseModel):
                 return self._allowed_literal_tokens(partial_text, ",")
 
             return self._allowed_literal_tokens(partial_text, "}")
-
-    def _allowed_string_tokens(
-        self,
-        partial_text: str,
-    ) -> set[int]:
-        return self._allowed_from_parser(
-        partial_text,
-        self._parse_string,
-    )
-
-    def _allowed_number_tokens(
-            self,
-            partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue a JSON number.
-            """
-            return self._allowed_from_parser(
-                partial_text,
-                self._parse_number,
-            )
-
-    def _allowed_boolean_tokens(
-            self,
-            partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue a JSON boolean.
-            """
-            return self._allowed_from_parser(
-                partial_text,
-                self._parse_boolean,
-            )

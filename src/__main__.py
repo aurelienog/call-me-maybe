@@ -5,12 +5,14 @@ from .utils import (validate_existing_file, validate_output_file,
                     load_json, save_json)
 from .parser import parse
 from .models import FunctionRegistry, FunctionDefinition, Prompt
-from .constrained_decoder import ConstrainedDecoder
+from .decoder.constrained_decoder import ConstrainedDecoder
+
 
 def main() -> None:
     args = parse()
     registry = FunctionRegistry()
-    decoder = ConstrainedDecoder
+    decoder = ConstrainedDecoder()
+    decoder.registry = registry
 
     try:
         validate_existing_file(args.functions_definition)
@@ -42,15 +44,13 @@ def main() -> None:
         print(f"[ERROR] {e}")
         return
     try:
-        results = decoder.run(prompts, registry)
+        results = decoder.run(prompts)
         save_json(args.output, results)
 
     except json.JSONDecodeError as e:
         print(f"[INVALID JSON] {e}")
         return
-    except json.JSONEncoder as e:
-        print(f"[INVALID JSON] {e}")
-        return
+
     except OSError as e:
         print(f"[SYSTEM ERROR] {e}")
 
