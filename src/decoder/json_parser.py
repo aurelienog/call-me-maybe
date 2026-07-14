@@ -1,9 +1,7 @@
 from .state import ConsumeResult
 
-def parse_string(
 
-        text: str,
-    ) -> tuple[ConsumeResult, str]:
+def parse_string(text: str) -> tuple[ConsumeResult, str]:
     """
     Parse a JSON string.
 
@@ -46,9 +44,8 @@ def parse_string(
 
 
 def parse_number(
-    text: str,
-    is_generating: bool = False,
-    ) -> tuple[ConsumeResult, str]:
+        text: str,
+        is_generating: bool = False) -> tuple[ConsumeResult, str]:
     """
     Parse a JSON number.
 
@@ -74,7 +71,7 @@ def parse_number(
 
         if number.endswith((".", "e", "E", "+", "-")):
             return ConsumeResult.PREFIX, text
-        
+
         if is_generating and not remaining:
             return ConsumeResult.PREFIX, text
 

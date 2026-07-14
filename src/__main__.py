@@ -11,8 +11,7 @@ from .decoder.constrained_decoder import ConstrainedDecoder
 def main() -> None:
     args = parse()
     registry = FunctionRegistry()
-    decoder = ConstrainedDecoder()
-    decoder.registry = registry
+    decoder = ConstrainedDecoder(registry=registry)
 
     try:
         validate_existing_file(args.functions_definition)
@@ -45,26 +44,18 @@ def main() -> None:
         return
     try:
         results = decoder.run(prompts)
-        save_json(args.output, results)
+        save_json(args.output,
+                  [result.model_dump() for result in results])
 
     except json.JSONDecodeError as e:
         print(f"[INVALID JSON] {e}")
-        return
 
     except OSError as e:
         print(f"[SYSTEM ERROR] {e}")
 
     except Exception as e:
         print(f"[PROCESS ERROR] {e}")
-    # for function in functions:
-    #     print(f"  - {function.name}")
-    print("ok")
 
 
 if __name__ == "__main__":
     main()
-
-    # print(f"\nLoaded {len(prompts)} prompts:")
-    # for p in prompts:
-    #     print(f"  - {p.prompt}")
-# c
