@@ -26,13 +26,17 @@ class ConstrainedDecoder(BaseModel):
         Returns:
             A FunctionCallResult for each input prompt.
         """
+        context = self.registry.build_context()
+        context_ids = self.llm.encode(context)
         results = []
         for prompt in prompts:
-            result = self.process_prompt(prompt)
+            result = self.process_prompt(prompt, context_ids)
             results.append(result)
         return results
 
-    def process_prompt(self, prompt: Prompt) -> FunctionCallResult:
+    def process_prompt(
+        self, prompt: Prompt, context_ids: list[int]
+    ) -> FunctionCallResult:
         """
         Generate a function call for a single prompt.
 
@@ -42,7 +46,13 @@ class ConstrainedDecoder(BaseModel):
         Returns:
             The generated FunctionCallResult.
         """
-        input_ids = self.llm.encode(prompt.prompt)
+        prompt_ids = self.llm.encode(
+            f"\nUser request:\n"
+            f"{prompt.prompt}\n\n"
+            "Generate the function call:\n"
+        )
+
+        input_ids = context_ids + prompt_ids
         output_ids = self.generate(input_ids)
         output = self.llm.decode(output_ids)
         data = json.loads(output)
@@ -78,14 +88,16 @@ class ConstrainedDecoder(BaseModel):
             next_token = self._select_next_token(masked)
             tokens.append(next_token)
             generated_tokens.append(next_token)
-            partial_text += self.llm.normalize(self.llm.token(next_token))
+            partial_text += self.llm.normalize(
+                self.llm.id_to_token[next_token]
+            )
 
             visited_in_step = set()
             while True:
                 current_checkpoint = (state, partial_text)
                 if current_checkpoint in visited_in_step:
                     break
-                
+
                 visited_in_step.add(current_checkpoint)
 
                 new_state, partial_text = self._consume(
@@ -109,7 +121,7 @@ class ConstrainedDecoder(BaseModel):
         state: DecoderState,
         partial_text: str,
     ) -> set[int]:
-    
+
         match state:
 
             case DecoderState.EXPECT_OPEN_BRACE:
@@ -177,8 +189,8 @@ class ConstrainedDecoder(BaseModel):
     def _consume(
         self,
         state: DecoderState,
-        remaining: str,
-        ) -> tuple[DecoderState, str]:
+        remaining: str
+    ) -> tuple[DecoderState, str]:
         """
         Consume as much text as possible from `remaining`
         according to the current decoder state.
@@ -209,7 +221,7 @@ class ConstrainedDecoder(BaseModel):
                 return state, remaining
 
             case DecoderState.EXPECT_FUNCTION_NAME:
-                for function in self.registry.functions():
+                for function in self.registry.function_names():
                     literal = f'"{function}"'
                     if remaining.startswith(literal):
                         self.current_function = function
@@ -251,7 +263,9 @@ class ConstrainedDecoder(BaseModel):
                 return state, remaining
 
             case DecoderState.EXPECT_PARAMETER_NAME:
-                for parameter in self.registry.parameters(self.current_function):
+                for parameter in self.registry.parameters(
+                    self.current_function
+                ):
                     if parameter in self.written_parameters:
                         continue
                     literal = f'"{parameter}"'
@@ -289,7 +303,7 @@ class ConstrainedDecoder(BaseModel):
 
                 if remaining.startswith("}"):
                     return (DecoderState.EXPECT_CLOSE_PARAMETERS,
-                            remaining[1:])
+                            remaining)
                 return state, remaining
 
             case DecoderState.EXPECT_CLOSE_PARAMETERS:
@@ -360,14 +374,14 @@ class ConstrainedDecoder(BaseModel):
             self,
             partial_text: str,
             literal: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue a fixed JSON literal.
+    ) -> set[int]:
+        """
+        Return the token IDs that can legally continue a fixed JSON literal.
 
-            The target literal is known in advance (for example "{", ":",
-            ",", '"name"', or '"parameters"'). Given the text generated so
-            far for the current state, only tokens that keep matching the
-            target literal are allowed.
+        The target literal is known in advance (for example "{", ":",
+        ",", '"name"', or '"parameters"'). Given the text generated so
+        far for the current state, only tokens that keep matching the
+        target literal are allowed.
 
             Examples:
                 literal = '"name"'
@@ -376,57 +390,59 @@ class ConstrainedDecoder(BaseModel):
                 partial_text = '"na'   -> tokens continuing 'me"'
                 partial_text = '"name"' -> no continuation (state changes)
             """
-            allowed: set[int] = set()
+        allowed: set[int] = set()
 
-            for token_id, candidate in self._candidate_tokens(partial_text):
+        for token_id, candidate in self._candidate_tokens(partial_text):
 
-                if literal.startswith(candidate):
-                    allowed.add(token_id)
+            if literal.startswith(candidate):
+                allowed.add(token_id)
 
-            return allowed
+        return allowed
 
     def _allowed_function_name_tokens(
             self,
             partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue a function name.
+    ) -> set[int]:
+        """
+        Return the token IDs that can legally continue a function name.
 
-            Only function names registered in the FunctionRegistry are valid.
-            At every generation step, a token is allowed only if appending its
-            normalized text keeps matching at least one registered function
-            name. Once a complete function name has been written, only the
-            closing quote is allowed.
+        Only function names registered in the FunctionRegistry are valid.
+        At every generation step, a token is allowed only if appending its
+        normalized text keeps matching at least one registered function
+        name. Once a complete function name has been written, only the
+        closing quote is allowed.
 
-            Examples:
-                available = ["fn_add", "fn_subtract"]
+        Examples:
+            available = ["fn_add", "fn_subtract"]
 
-                partial_text = '"'          -> tokens continuing 'fn_'
-                partial_text = '"fn_'       -> tokens continuing 'add' or 'subtract'
-                partial_text = '"fn_add'    -> only the closing quote is valid
-            """
-            allowed: set[int] = set()
+            partial_text = '"'          -> tokens continuing 'fn_'
+            partial_text = '"fn_'       -> tokens continuing 'add'
+                                            or 'subtract'
+            partial_text = '"fn_add'    -> only the closing quote is valid
+        """
 
-            functions = [
-                f'"{function}"'
-                for function in self.registry.functions()
-            ]
+        allowed: set[int] = set()
 
-            for token_id, candidate in self._candidate_tokens(partial_text):
+        functions = [
+            f'"{function}"'
+            for function in self.registry.function_names()
+        ]
 
-                for function in functions:
-                    if function.startswith(candidate):
-                        allowed.add(token_id)
-                        break
+        for token_id, candidate in self._candidate_tokens(partial_text):
 
-            return allowed
+            for function in functions:
+                if function.startswith(candidate):
+                    allowed.add(token_id)
+                    break
+
+        return allowed
 
     def _allowed_parameter_name_tokens(
             self,
             partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue a parameter name.
+    ) -> set[int]:
+        """
+        Return the token IDs that can legally continue a parameter name.
 
             Only parameters belonging to the currently selected function are
             considered valid. Parameters already generated earlier in the JSON
@@ -439,91 +455,93 @@ class ConstrainedDecoder(BaseModel):
                 partial_text = '"a'     -> only the closing quote is valid
                 written_parameters = {"a"} -> only parameter 'b' is allowed
             """
-            allowed: set[int] = set()
+        allowed: set[int] = set()
 
-            assert self.current_function is not None
+        assert self.current_function is not None
 
-            parameters = [
+        parameters = [
                 f'"{parameter}"'
-                for parameter in self.registry.parameters(self.current_function)
+                for parameter in self.registry.parameters(
+                    self.current_function
+                )
                 if parameter not in self.written_parameters
             ]
 
-            for token_id, candidate in self._candidate_tokens(partial_text):
+        for token_id, candidate in self._candidate_tokens(partial_text):
 
-                for parameter in parameters:
-                    if parameter.startswith(candidate):
-                        allowed.add(token_id)
-                        break
+            for parameter in parameters:
+                if parameter.startswith(candidate):
+                    allowed.add(token_id)
+                    break
 
-            return allowed
+        return allowed
 
     def _allowed_parameter_value_tokens(
             self,
             partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally continue the current
-            parameter value.
+    ) -> set[int]:
+        """
+        Return the token IDs that can legally continue the current
+        parameter value.
 
-            The allowed tokens depend on the declared type of the current
-            parameter (string, number or boolean). Only tokens that keep
-            producing a valid JSON value of that type are allowed.
+        The allowed tokens depend on the declared type of the current
+        parameter (string, number or boolean). Only tokens that keep
+        producing a valid JSON value of that type are allowed.
 
-            Examples:
-                type = string
-                    partial_text = '"'      -> printable characters or closing quote
+        Examples:
+            type = string
+                partial_text = '"'   -> printable characters or closing quote
 
-                type = number
-                    partial_text = ""       -> '-', digits
-                    partial_text = "12"     -> digits, '.', 'e', 'E'
+            type = number
+                partial_text = ""       -> '-', digits
+                partial_text = "12"     -> digits, '.', 'e', 'E'
 
-                type = boolean
-                    partial_text = ""       -> tokens continuing 'true' or 'false'
-                    partial_text = "tr"     -> tokens continuing 'ue'
-            """
-            assert self.current_function is not None
-            assert self.current_parameter is not None
+            type = boolean
+                partial_text = ""       -> tokens continuing 'true' or 'false'
+                partial_text = "tr"     -> tokens continuing 'ue'
+        """
+        assert self.current_function is not None
+        assert self.current_parameter is not None
 
-            parameter_type = self.registry.parameter_type(
-                self.current_function,
-                self.current_parameter
-            )
+        parameter_type = self.registry.parameter_type(
+            self.current_function,
+            self.current_parameter
+        )
 
-            match parameter_type:
-                case "string":
-                    parser = parse_string
-                case "number":
-                    parser = parse_number
-                case "boolean":
-                    parser = parse_boolean
-                case _:
-                    raise ValueError(
-                        f"Unsupported parameter type: {parameter_type}"
-                    )
+        match parameter_type:
+            case "string":
+                parser = parse_string
+            case "number":
+                parser = parse_number
+            case "boolean":
+                parser = parse_boolean
+            case _:
+                raise ValueError(
+                    f"Unsupported parameter type: {parameter_type}"
+                )
 
-            return self._allowed_from_parser(
-                partial_text,
-                parser,
-            )
+        return self._allowed_from_parser(
+            partial_text,
+            parser,
+        )
 
     def _allowed_parameter_separator_tokens(
             self,
             partial_text: str,
-        ) -> set[int]:
-            """
-            Return the token IDs that can legally follow a completed parameter.
+    ) -> set[int]:
+        """
+        Return the token IDs that can legally follow a completed parameter.
 
-            If there are remaining parameters to generate, only the comma is
-            allowed. Otherwise, only the closing brace of the parameters object
-            is allowed.
-            """
-            assert self.current_function is not None
+        If there are remaining parameters to generate, only the comma is
+        allowed. Otherwise, only the closing brace of the parameters object
+        is allowed.
+        """
+        assert self.current_function is not None
 
-            parameters = set(self.registry.parameters(self.current_function))
-            remaining = parameters - self.written_parameters
+        parameters = set(self.registry.parameters(self.current_function))
+        remaining = parameters - self.written_parameters
 
-            if remaining:
-                return self._allowed_literal_tokens(partial_text, ",")
+        if remaining:
+            return self._allowed_literal_tokens(partial_text, ",")
 
-            return self._allowed_literal_tokens(partial_text, "}")
+        return self._allowed_literal_tokens(partial_text, "}")
