@@ -88,8 +88,9 @@ class Llm(BaseModel):
     @staticmethod
     def normalize(token: str) -> str:
         """
-        Normalize the token string by converting tokenizer-specific space 
-        representations into real python spaces, preserving exact whitespace length.
+        Normalize the token string by converting tokenizer-specific space
+        representations into real python spaces, preserving
+        exact whitespace length.
         """
         return (
             token
