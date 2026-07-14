@@ -141,3 +141,28 @@ class FunctionRegistry(BaseModel):
             KeyError: If the function does not exist.
         """
         return self.get(name).returns.type
+
+    def build_context(self) -> str:
+        """
+        Build the prompt context describing the available functions.
+        """
+
+        lines = ["Available functions:\n"]
+
+        for function in self.functions.values():
+            lines.append(f"- {function.name}")
+            lines.append(f"  Description: {function.description}")
+
+            lines.append("  Parameters:")
+
+            for name, parameter in function.parameters.items():
+                lines.append(
+                    f"    - {name}: {parameter.type}"
+                )
+
+            lines.append("")
+            lines.append(
+                'Return only JSON with keys "name" and "parameters".'
+            )
+
+        return "\n".join(lines)
