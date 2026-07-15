@@ -283,17 +283,17 @@ class ConstrainedDecoder(BaseModel):
                 return state, remaining
 
             case DecoderState.EXPECT_PARAMETER_VALUE:
-
-                result, remaining = self._parse_parameter_value(remaining)
-
+                print("remaining:", repr(remaining))
+                result, rest = self._parse_parameter_value(remaining)
+                print(result, repr(rest))
                 if result != ConsumeResult.COMPLETE:
-                    return state, remaining
+                    return state, rest
 
                 self.current_parameter = None
 
                 return (
                     DecoderState.EXPECT_PARAMETER_SEPARATOR,
-                    remaining,
+                    rest,
                 )
 
             case DecoderState.EXPECT_PARAMETER_SEPARATOR:
@@ -344,10 +344,10 @@ class ConstrainedDecoder(BaseModel):
                 return parse_string(remaining)
 
             case "number":
-                return parse_number(remaining)
+                return parse_number(remaining, is_generating=True)
 
             case "boolean":
-                return parse_boolean(remaining)
+                return parse_boolean(remaining, is_generating=True)
 
         raise ValueError(f"Unknown parameter type: {parameter_type}")
 
@@ -360,10 +360,10 @@ class ConstrainedDecoder(BaseModel):
         allowed = set()
 
         for token_id, candidate in self._candidate_tokens(partial_text):
-            if parser.__name__ == "parse_number":
-                result, _ = parser(candidate, is_generating=True)
-            else:
+            if parser.__name__ == "parse_string":
                 result, _ = parser(candidate)
+            else:
+                result, _ = parser(candidate, is_generating=True)
 
             if result != ConsumeResult.INVALID:
                 allowed.add(token_id)

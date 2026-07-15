@@ -90,12 +90,15 @@ def parse_number(
 
 def parse_boolean(
     text: str,
+    is_generating: bool = False
 ) -> tuple[ConsumeResult, str]:
 
     for literal in ("true", "false"):
 
         if literal.startswith(text):
             if text == literal:
+                if is_generating:
+                    return ConsumeResult.PREFIX, text
                 return ConsumeResult.COMPLETE, ""
             return ConsumeResult.PREFIX, text
 
