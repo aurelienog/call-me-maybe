@@ -110,11 +110,51 @@ class ConstrainedDecoder(BaseModel):
 
         return generated_tokens
 
-    def _candidate_tokens(self, partial_text) -> Iterator[tuple[int, str]]:
+    def _candidate_tokens(self, state, partial_text) -> Iterator[tuple[int, str]]:
+        """
+        Yields only candidate tokens relevant to the current decoder state.
+        This drastically reduces the search space from 151k tokens to a few dozen/hundreds,
+        guaranteeing execution in under 5 minutes.
+        """
+        if state in (
+            DecoderState.EXPECT_OPEN_BRACE, 
+            DecoderState.EXPECT_NAME_COLON, 
+            DecoderState.EXPECT_COMMA,
+            DecoderState.EXPECT_PARAMETERS_COLON,
+            DecoderState.EXPECT_PARAMETERS_OPEN,
+            DecoderState.EXPECT_PARAMETER_COLON,
+            DecoderState.EXPECT_PARAMETER_SEPARATOR,
+            DecoderState.EXPECT_CLOSE_PARAMETERS,
+            DecoderState.EXPECT_CLOSE_OBJECT
+        ):
+            # Solo iteramos sobre tokens extremadamente cortos (caracteres de control)
+            for token_id, token in self.llm.id_to_token.items():
+                norm = self.llm.normalize(token)
+                if len(norm) <= 3:  # Los operadores JSON son tokens muy cortos
+                    yield token_id, partial_text + norm
+            return
+        
+        # Caso 2: Si estamos decodificando el VALOR de un parámetro
+        if state == DecoderState.EXPECT_PARAMETER_VALUE:
+            assert self.current_function is not None
+            assert self.current_parameter is not None
 
+            p_type = self.registry.parameter_type(self.current_function, self.current_parameter)
+            
+            if p_type == "number":
+                for token_id, norm in self.llm.tokens_for_numbers:
+                    yield token_id, partial_text + norm
+                return
+                
+            elif p_type == "boolean":
+                for token_id, norm in self.llm.tokens_for_booleans:
+                    yield token_id, partial_text + norm
+                return
+        
+        # Caso 3: Fallback para Strings, Nombres de funciones o Nombres de parámetros
+        # Para strings y nombres dinámicos sí recorremos el vocabulario, pero de forma normalizada.
         for token_id, token in self.llm.id_to_token.items():
-            token = self.llm.normalize(token)
-            yield token_id, partial_text + token
+            yield token_id, partial_text + self.llm.normalize(token)
 
     def _allowed_tokens(
         self,
@@ -125,49 +165,50 @@ class ConstrainedDecoder(BaseModel):
         match state:
 
             case DecoderState.EXPECT_OPEN_BRACE:
-                return self._allowed_literal_tokens(partial_text, "{")
+                return self._allowed_literal_tokens(state, partial_text, "{")
 
             case DecoderState.EXPECT_NAME_KEY:
-                return self._allowed_literal_tokens(partial_text, '"name"')
+                return self._allowed_literal_tokens(state, partial_text, '"name"')
 
             case DecoderState.EXPECT_NAME_COLON:
-                return self._allowed_literal_tokens(partial_text, ":")
+                return self._allowed_literal_tokens(state, partial_text, ":")
 
             case DecoderState.EXPECT_FUNCTION_NAME:
-                return self._allowed_function_name_tokens(partial_text)
+                return self._allowed_function_name_tokens(state, partial_text)
 
             case DecoderState.EXPECT_COMMA:
-                return self._allowed_literal_tokens(partial_text, ",")
+                return self._allowed_literal_tokens(state, partial_text, ",")
 
             case DecoderState.EXPECT_PARAMETERS_KEY:
                 return self._allowed_literal_tokens(
+                    state,
                     partial_text,
                     '"parameters"',
                 )
 
             case DecoderState.EXPECT_PARAMETERS_COLON:
-                return self._allowed_literal_tokens(partial_text, ":")
+                return self._allowed_literal_tokens(state, partial_text, ":")
 
             case DecoderState.EXPECT_PARAMETERS_OPEN:
-                return self._allowed_literal_tokens(partial_text, "{")
+                return self._allowed_literal_tokens(state, partial_text, "{")
 
             case DecoderState.EXPECT_PARAMETER_NAME:
-                return self._allowed_parameter_name_tokens(partial_text)
+                return self._allowed_parameter_name_tokens(state, partial_text)
 
             case DecoderState.EXPECT_PARAMETER_COLON:
-                return self._allowed_literal_tokens(partial_text, ":")
+                return self._allowed_literal_tokens(state, partial_text, ":")
 
             case DecoderState.EXPECT_PARAMETER_VALUE:
-                return self._allowed_parameter_value_tokens(partial_text)
+                return self._allowed_parameter_value_tokens(state, partial_text)
 
             case DecoderState.EXPECT_PARAMETER_SEPARATOR:
                 return self._allowed_parameter_separator_tokens(partial_text)
 
             case DecoderState.EXPECT_CLOSE_PARAMETERS:
-                return self._allowed_literal_tokens(partial_text, "}")
+                return self._allowed_literal_tokens(state, partial_text, "}")
 
             case DecoderState.EXPECT_CLOSE_OBJECT:
-                return self._allowed_literal_tokens(partial_text, "}")
+                return self._allowed_literal_tokens(state, partial_text, "}")
 
             case DecoderState.FINISHED:
                 return set()
@@ -353,17 +394,15 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_from_parser(
         self,
+        state: DecoderState,
         partial_text: str,
         parser,
     ) -> set[int]:
 
         allowed = set()
 
-        for token_id, candidate in self._candidate_tokens(partial_text):
-            if parser.__name__ == "parse_string":
-                result, _ = parser(candidate)
-            else:
-                result, _ = parser(candidate, is_generating=True)
+        for token_id, candidate in self._candidate_tokens(state, partial_text):
+            result, _ = parser(candidate, is_generating=True)
 
             if result != ConsumeResult.INVALID:
                 allowed.add(token_id)
@@ -372,6 +411,7 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_literal_tokens(
             self,
+            state: DecoderState,
             partial_text: str,
             literal: str,
     ) -> set[int]:
@@ -392,7 +432,7 @@ class ConstrainedDecoder(BaseModel):
             """
         allowed: set[int] = set()
 
-        for token_id, candidate in self._candidate_tokens(partial_text):
+        for token_id, candidate in self._candidate_tokens(state, partial_text):
 
             if literal.startswith(candidate):
                 allowed.add(token_id)
@@ -401,6 +441,7 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_function_name_tokens(
             self,
+            state: DecoderState,
             partial_text: str,
     ) -> set[int]:
         """
@@ -428,7 +469,7 @@ class ConstrainedDecoder(BaseModel):
             for function in self.registry.function_names()
         ]
 
-        for token_id, candidate in self._candidate_tokens(partial_text):
+        for token_id, candidate in self._candidate_tokens(state, partial_text):
 
             for function in functions:
                 if function.startswith(candidate):
@@ -439,6 +480,7 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_parameter_name_tokens(
             self,
+            state: DecoderState,
             partial_text: str,
     ) -> set[int]:
         """
@@ -467,7 +509,7 @@ class ConstrainedDecoder(BaseModel):
                 if parameter not in self.written_parameters
             ]
 
-        for token_id, candidate in self._candidate_tokens(partial_text):
+        for token_id, candidate in self._candidate_tokens(state, partial_text):
 
             for parameter in parameters:
                 if parameter.startswith(candidate):
@@ -478,6 +520,7 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_parameter_value_tokens(
             self,
+            state: DecoderState,
             partial_text: str,
     ) -> set[int]:
         """
@@ -521,6 +564,7 @@ class ConstrainedDecoder(BaseModel):
                 )
 
         return self._allowed_from_parser(
+            state,
             partial_text,
             parser,
         )

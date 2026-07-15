@@ -20,6 +20,9 @@ class Llm(BaseModel):
     token_to_id: dict[str, int] = Field(default_factory=dict)
     id_to_token: dict[int, str] = Field(default_factory=dict)
 
+    tokens_for_numbers: list[tuple[int, str]] = Field(default_factory=list)
+    tokens_for_booleans: list[tuple[int, str]] = Field(default_factory=list)
+
     def model_post_init(self, _: object) -> None:
         """Load the tokenizer vocabulary once."""
         vocab_path = self.model.get_path_to_vocab_file()
@@ -29,6 +32,16 @@ class Llm(BaseModel):
             token_id: token
             for token, token_id in self.token_to_id.items()
         }
+
+        for token_id, raw_token in self.id_to_token.items():
+            norm_token = self.normalize(raw_token)
+
+            if any(c.isdigit() or c in ".-eE+" for c in norm_token) and len(norm_token) < 10:
+                self.tokens_for_numbers.append((token_id, norm_token))
+            
+            lower_token = norm_token.lower()
+            if any(literal.startswith(lower_token) or lower_token.startswith(literal) for literal in ("true", "false")):
+                self.tokens_for_booleans.append((token_id, norm_token))
 
     def encode(self, text: str) -> list[int]:
         """
