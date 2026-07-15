@@ -202,7 +202,7 @@ class ConstrainedDecoder(BaseModel):
                 return self._allowed_parameter_value_tokens(state, partial_text)
 
             case DecoderState.EXPECT_PARAMETER_SEPARATOR:
-                return self._allowed_parameter_separator_tokens(partial_text)
+                return self._allowed_parameter_separator_tokens(state, partial_text)
 
             case DecoderState.EXPECT_CLOSE_PARAMETERS:
                 return self._allowed_literal_tokens(state, partial_text, "}")
@@ -571,6 +571,7 @@ class ConstrainedDecoder(BaseModel):
 
     def _allowed_parameter_separator_tokens(
             self,
+            state: DecoderState,
             partial_text: str,
     ) -> set[int]:
         """
@@ -586,6 +587,6 @@ class ConstrainedDecoder(BaseModel):
         remaining = parameters - self.written_parameters
 
         if remaining:
-            return self._allowed_literal_tokens(partial_text, ",")
+            return self._allowed_literal_tokens(state, partial_text, ",")
 
-        return self._allowed_literal_tokens(partial_text, "}")
+        return self._allowed_literal_tokens(state, partial_text, "}")
