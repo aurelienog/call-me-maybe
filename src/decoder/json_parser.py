@@ -1,7 +1,7 @@
 from .state import ConsumeResult
 
 
-def parse_string(text: str, is_generating: bool = False) -> tuple[ConsumeResult, str]:
+def parse_string(text: str) -> tuple[ConsumeResult, str]:
     """
     Parse a JSON string.
 
@@ -35,8 +35,6 @@ def parse_string(text: str, is_generating: bool = False) -> tuple[ConsumeResult,
             continue
 
         if c == '"':
-            if is_generating and i == 1:
-                return ConsumeResult.PREFIX, text # Fuerza a que siga escribiendo
             return (
                 ConsumeResult.COMPLETE,
                 text[i + 1:],

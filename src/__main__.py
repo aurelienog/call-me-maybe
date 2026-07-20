@@ -11,7 +11,6 @@ from .decoder.constrained_decoder import ConstrainedDecoder
 def main() -> None:
     args = parse()
     registry = FunctionRegistry()
-    decoder = ConstrainedDecoder(registry=registry)
 
     try:
         validate_existing_file(args.functions_definition)
@@ -21,6 +20,7 @@ def main() -> None:
         functions_data = load_json(args.functions_definition)
         functions = FunctionDefinition.validate_many(functions_data)
         registry.load(functions)
+        decoder = ConstrainedDecoder(registry=registry)
 
         prompts_data = load_json(args.input)
         prompts = Prompt.validate_many(prompts_data)
