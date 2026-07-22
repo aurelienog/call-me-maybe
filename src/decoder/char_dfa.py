@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CharState(IntEnum):
+    """
+    Character-level DFA state enumeration.
+    """
     START = 0
     OBJ_OPEN = 1
     KEY_NAME_Q1 = 2
@@ -35,15 +38,30 @@ NUM_STATES = 22
 
 class CharDFA(BaseModel):
     """
-    Autómata determinista a nivel de caracteres validado por Pydantic.
+    Character-level deterministic finite automaton validated with Pydantic.
+
+    Attributes:
+        allowed_function_names: List of allowed tool function names.
+        start_state: The initial state of the automaton.
+        accept_states: Set of valid accepting states.
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     allowed_function_names: list[str] = Field(default_factory=list)
     start_state: CharState = CharState.START
-    accept_states: set[CharState] = Field(default_factory=lambda: {CharState.OBJ_CLOSE})
+    accept_states: set[CharState] = Field(
+        default_factory=lambda: {CharState.OBJ_CLOSE})
 
     def get_allowed_first_chars(self, state: int) -> set[str]:
+        """
+        Return the set of allowed initial characters for a given state.
+
+        Args:
+            state: Current state index or CharState.
+
+        Returns:
+            A set of characters that can legally transition out of this state.
+        """
         match state:
             case CharState.START:
                 return {"{", " "}
@@ -74,10 +92,13 @@ class CharDFA(BaseModel):
             case CharState.PARAM_KEY_Q2:
                 return {":", " "}
             case CharState.PARAM_COLON:
-                return {'"', "t", "f", "-", "+", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", " "}
+                return {'"', "t", "f", "-", "+", "0", "1", "2", "3", "4", "5",
+                        "6", "7", "8", "9", " "}
             case CharState.VAL_STRING_Q1:
                 return set('abcdefghijklmnopqrstuvwxyz0123456789_ -/\\":')
-            case CharState.VAL_STRING_Q2 | CharState.VAL_NUMBER | CharState.VAL_BOOL:
+            case (CharState.VAL_STRING_Q2
+                    | CharState.VAL_NUMBER
+                    | CharState.VAL_BOOL):
                 return {",", "}", " "}
             case CharState.PARAM_COMMA:
                 return {'"', " "}
@@ -87,9 +108,20 @@ class CharDFA(BaseModel):
                 return set()
 
     def step(self, state: int, char: str) -> int:
+        """
+        Compute the next state transition given a single character.
+
+        Args:
+            state: Current state index or CharState.
+            char: Input character to consume.
+
+        Returns:
+            The resulting state index, or CharState.REJECT if invalid.
+        """
         if state == CharState.REJECT:
             return CharState.REJECT
 
+        # Ignore non-string whitespace transitions
         if char in " \t\n\r" and state not in (
             CharState.KEY_NAME_Q1,
             CharState.VAL_NAME_Q1,
@@ -100,38 +132,92 @@ class CharDFA(BaseModel):
             return state
 
         match state:
-            case CharState.START: return CharState.OBJ_OPEN if char == "{" else CharState.REJECT
-            case CharState.OBJ_OPEN: return CharState.KEY_NAME_Q1 if char == '"' else CharState.REJECT
-            case CharState.KEY_NAME_Q1: return CharState.KEY_NAME_Q2 if char == '"' else CharState.KEY_NAME_Q1
-            case CharState.KEY_NAME_Q2: return CharState.COLON_NAME if char == ":" else CharState.REJECT
-            case CharState.COLON_NAME: return CharState.VAL_NAME_Q1 if char == '"' else CharState.REJECT
-            case CharState.VAL_NAME_Q1: return CharState.VAL_NAME_Q2 if char == '"' else CharState.VAL_NAME_Q1
-            case CharState.VAL_NAME_Q2: return CharState.COMMA_AFTER_NAME if char == "," else CharState.REJECT
-            case CharState.COMMA_AFTER_NAME: return CharState.KEY_PARAMS_Q1 if char == '"' else CharState.REJECT
-            case CharState.KEY_PARAMS_Q1: return CharState.KEY_PARAMS_Q2 if char == '"' else CharState.KEY_PARAMS_Q1
-            case CharState.KEY_PARAMS_Q2: return CharState.COLON_PARAMS if char == ":" else CharState.REJECT
-            case CharState.COLON_PARAMS: return CharState.PARAMS_OBJ_OPEN if char == "{" else CharState.REJECT
+            case CharState.START:
+                return CharState.OBJ_OPEN if char == "{" else CharState.REJECT
+            case CharState.OBJ_OPEN:
+                return (CharState.KEY_NAME_Q1
+                        if char == '"' else CharState.REJECT)
+            case CharState.KEY_NAME_Q1:
+                return (CharState.KEY_NAME_Q2
+                        if char == '"' else CharState.KEY_NAME_Q1)
+            case CharState.KEY_NAME_Q2:
+                return (CharState.COLON_NAME
+                        if char == ":" else CharState.REJECT)
+            case CharState.COLON_NAME:
+                return (CharState.VAL_NAME_Q1
+                        if char == '"' else CharState.REJECT)
+            case CharState.VAL_NAME_Q1:
+                return (CharState.VAL_NAME_Q2
+                        if char == '"' else CharState.VAL_NAME_Q1)
+            case CharState.VAL_NAME_Q2:
+                return (CharState.COMMA_AFTER_NAME
+                        if char == "," else CharState.REJECT)
+            case CharState.COMMA_AFTER_NAME:
+                return (CharState.KEY_PARAMS_Q1
+                        if char == '"' else CharState.REJECT)
+            case CharState.KEY_PARAMS_Q1:
+                return (CharState.KEY_PARAMS_Q2
+                        if char == '"' else CharState.KEY_PARAMS_Q1)
+            case CharState.KEY_PARAMS_Q2:
+                return (CharState.COLON_PARAMS
+                        if char == ":" else CharState.REJECT)
+            case CharState.COLON_PARAMS:
+                return (CharState.PARAMS_OBJ_OPEN
+                        if char == "{" else CharState.REJECT)
             case CharState.PARAMS_OBJ_OPEN:
-                if char == "}": return CharState.PARAMS_OBJ_CLOSE
-                return CharState.PARAM_KEY_Q1 if char == '"' else CharState.REJECT
-            case CharState.PARAM_KEY_Q1: return CharState.PARAM_KEY_Q2 if char == '"' else CharState.PARAM_KEY_Q1
-            case CharState.PARAM_KEY_Q2: return CharState.PARAM_COLON if char == ":" else CharState.REJECT
+                if char == "}":
+                    return CharState.PARAMS_OBJ_CLOSE
+                return (CharState.PARAM_KEY_Q1
+                        if char == '"'
+                        else CharState.REJECT)
+            case CharState.PARAM_KEY_Q1:
+                return (CharState.PARAM_KEY_Q2
+                        if char == '"' else CharState.PARAM_KEY_Q1)
+            case CharState.PARAM_KEY_Q2:
+                return (CharState.PARAM_COLON
+                        if char == ":" else CharState.REJECT)
             case CharState.PARAM_COLON:
-                if char == '"': return CharState.VAL_STRING_Q1
-                if char.isdigit() or char in "-+": return CharState.VAL_NUMBER
-                if char in "tf": return CharState.VAL_BOOL
+                if char == '"':
+                    return CharState.VAL_STRING_Q1
+                if char.isdigit() or char in "-+":
+                    return CharState.VAL_NUMBER
+                if char in "tf":
+                    return CharState.VAL_BOOL
                 return CharState.REJECT
-            case CharState.VAL_STRING_Q1: return CharState.VAL_STRING_Q2 if char == '"' else CharState.VAL_STRING_Q1
-            case CharState.VAL_STRING_Q2 | CharState.VAL_NUMBER | CharState.VAL_BOOL:
-                if char == ",": return CharState.PARAM_COMMA
-                if char == "}": return CharState.PARAMS_OBJ_CLOSE
-                if state == CharState.VAL_NUMBER and (char.isdigit() or char in ".eE-+"): return CharState.VAL_NUMBER
+            case CharState.VAL_STRING_Q1:
+                return (CharState.VAL_STRING_Q2
+                        if char == '"' else CharState.VAL_STRING_Q1)
+            case (CharState.VAL_STRING_Q2
+                    | CharState.VAL_NUMBER
+                    | CharState.VAL_BOOL):
+                if char == ",":
+                    return CharState.PARAM_COMMA
+                if char == "}":
+                    return CharState.PARAMS_OBJ_CLOSE
+                if (state == CharState.VAL_NUMBER
+                    and (char.isdigit()
+                         or char in ".eE-+")):
+                    return CharState.VAL_NUMBER
                 return CharState.REJECT
-            case CharState.PARAM_COMMA: return CharState.PARAM_KEY_Q1 if char == '"' else CharState.REJECT
-            case CharState.PARAMS_OBJ_CLOSE: return CharState.OBJ_CLOSE if char == "}" else CharState.REJECT
+            case CharState.PARAM_COMMA:
+                return (CharState.PARAM_KEY_Q1
+                        if char == '"' else CharState.REJECT)
+            case CharState.PARAMS_OBJ_CLOSE:
+                return CharState.OBJ_CLOSE if char == "}" else CharState.REJECT
             case _: return CharState.REJECT
 
     def simulate_string(self, start_state: int, text: str) -> int:
+        """
+        Simulate consuming a string character by character from a given state.
+
+        Args:
+            start_state: The state index from which simulation starts.
+            text: String text to simulate.
+
+        Returns:
+            Final state index after consuming the text,
+            or CharState.REJECT if invalid.
+        """
         state = start_state
         for char in text:
             state = self.step(state, char)

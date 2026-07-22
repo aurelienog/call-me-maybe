@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict    # type: ignore
+from pydantic import BaseModel, ConfigDict
 
 
 class Prompt(BaseModel):

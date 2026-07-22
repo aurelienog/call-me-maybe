@@ -1,12 +1,6 @@
 from . import FunctionDefinition, ParameterDefinition, JsonType
 
-from pydantic import BaseModel, ConfigDict, Field    # type: ignore
-
-# @model_validator(mode="after")
-# def validate_business_rules(self) -> "FunctionRegistry":
-#     ... que no tenga string vacios
-
-# registry.model_dump_json() para comprobar?
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FunctionRegistry(BaseModel):
@@ -144,7 +138,8 @@ class FunctionRegistry(BaseModel):
 
     def build_context(self) -> str:
         """
-        Build the prompt context describing available functions and output rules.
+        Build the prompt context describing available functions
+        and output rules.
         """
         lines = ["Available functions:\n"]
 
@@ -158,7 +153,9 @@ class FunctionRegistry(BaseModel):
             lines.append("")
 
         lines.append("Instructions:")
-        lines.append("- Output strictly valid JSON with keys 'name' and 'parameters'.")
-        lines.append("- For regex patterns, avoid unnecessary capture groups e.g. use [0-9]+ instead of ([0-9]+).")
+        lines.append("- Output strictly valid JSON with keys 'name'"
+                     "and 'parameters'.")
+        lines.append("- For regex patterns, avoid unnecessary capture groups"
+                     "e.g. use [0-9]+ instead of ([0-9]+).")
 
         return "\n".join(lines)
