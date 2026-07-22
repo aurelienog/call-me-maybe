@@ -1,11 +1,16 @@
 import json
-from pydantic import ValidationError    # type: ignore
+from pydantic import ValidationError  # type: ignore
 
-from .utils import (validate_existing_file, validate_output_file,
-                    load_json, save_json)
+from .utils import (
+    validate_existing_file,
+    validate_output_file,
+    load_json,
+    save_json,
+)
 from .parser import parse
 from .models import FunctionRegistry, FunctionDefinition, Prompt
-from .decoder.constrained_decoder import ConstrainedDecoder
+from .decoder import ConstrainedDecoder
+from .llm import Llm
 
 
 def main() -> None:
@@ -20,7 +25,16 @@ def main() -> None:
         functions_data = load_json(args.functions_definition)
         functions = FunctionDefinition.validate_many(functions_data)
         registry.load(functions)
-        decoder = ConstrainedDecoder(registry=registry)
+
+        # 1. Instanciamos la LLM (carga el modelo y el vocabulario)
+        print("[INFO] Cargando modelo y vocabulario...")
+        llm = Llm()
+
+        # 2. Pasamos la LLM y el Registry al Decoder
+        decoder = ConstrainedDecoder(
+            llm=llm,
+            registry=registry,
+        )
 
         prompts_data = load_json(args.input)
         prompts = Prompt.validate_many(prompts_data)
@@ -42,10 +56,18 @@ def main() -> None:
     except ValueError as e:
         print(f"[ERROR] {e}")
         return
+
     try:
+        # 3. Procesamos los prompts con feedback visual en terminal
+        print(f"[INFO] Procesando {len(prompts)} prompts...")
         results = decoder.run(prompts)
-        save_json(args.output,
-                  [result.model_dump() for result in results])
+
+        # 4. Guardamos los resultados
+        save_json(
+            args.output,
+            [result.model_dump() for result in results],
+        )
+        print(f"[SUCCESS] Resultados guardados exitosamente en: {args.output}")
 
     except json.JSONDecodeError as e:
         print(f"[INVALID JSON] {e}")

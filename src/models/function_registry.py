@@ -144,25 +144,21 @@ class FunctionRegistry(BaseModel):
 
     def build_context(self) -> str:
         """
-        Build the prompt context describing the available functions.
+        Build the prompt context describing available functions and output rules.
         """
-
         lines = ["Available functions:\n"]
 
         for function in self.functions.values():
             lines.append(f"- {function.name}")
             lines.append(f"  Description: {function.description}")
-
             lines.append("  Parameters:")
 
             for name, parameter in function.parameters.items():
-                lines.append(
-                    f"    - {name}: {parameter.type}"
-                )
-
+                lines.append(f"    - {name}: {parameter.type}")
             lines.append("")
-            lines.append(
-                'Return only JSON with keys "name" and "parameters".'
-            )
+
+        lines.append("Instructions:")
+        lines.append("- Output strictly valid JSON with keys 'name' and 'parameters'.")
+        lines.append("- For regex patterns, avoid unnecessary capture groups e.g. use [0-9]+ instead of ([0-9]+).")
 
         return "\n".join(lines)
