@@ -5,12 +5,19 @@ try:
     from pydantic import ValidationError    # type: ignore
 except ImportError:
     print("❌[ERROR] Missing dependency: pydantic")
+    print("Install it with: pip install pydantic")
     sys.exit(1)
 
 try:
     from llm_sdk.llm_sdk import Small_LLM_Model
 except ImportError:
-    print("❌[ERROR] llm_sdk not found or missing dependencies")
+    print("❌[ERROR] Failed to import llm_sdk.")
+    print("Make sure llm_sdk and its dependencies are installed:")
+    print(" - numpy")
+    print(" - pydantic")
+    print(" - torch")
+    print(" - transformers")
+    print(" - huggingface-hub")
     sys.exit(1)
 
 
@@ -27,6 +34,18 @@ from .llm import Llm
 
 
 def main() -> None:
+    """
+    Run the function-calling pipeline.
+
+    The program validates the input files, loads the function
+    definitions into the registry, initializes the language
+    model and constrained decoder, processes the input prompts,
+    and writes the predicted function calls to the output JSON
+    file.
+
+    All expected validation, I/O, and JSON parsing errors are
+    handled gracefully and reported to the user.
+    """
     args = parse()
     registry = FunctionRegistry()
 
