@@ -1,5 +1,18 @@
+import sys
 import json
-from pydantic import ValidationError  # type: ignore
+
+try:
+    from pydantic import ValidationError    # type: ignore
+except ImportError:
+    print("❌[ERROR] Missing dependency: pydantic")
+    sys.exit(1)
+
+try:
+    from llm_sdk.llm_sdk import Small_LLM_Model
+except ImportError:
+    print("❌[ERROR] llm_sdk not found or missing dependencies")
+    sys.exit(1)
+
 
 from .utils import (
     validate_existing_file,
@@ -26,11 +39,9 @@ def main() -> None:
         functions = FunctionDefinition.validate_many(functions_data)
         registry.load(functions)
 
-        # 1. Instanciamos la LLM (carga el modelo y el vocabulario)
         print("[INFO] Cargando modelo y vocabulario...")
-        llm = Llm()
+        llm: Small_LLM_Model = Llm()
 
-        # 2. Pasamos la LLM y el Registry al Decoder
         decoder = ConstrainedDecoder(
             llm=llm,
             registry=registry,
@@ -58,11 +69,9 @@ def main() -> None:
         return
 
     try:
-        # 3. Procesamos los prompts con feedback visual en terminal
         print(f"[INFO] Procesando {len(prompts)} prompts...")
         results = decoder.run(prompts)
 
-        # 4. Guardamos los resultados
         save_json(
             args.output,
             [result.model_dump() for result in results],
