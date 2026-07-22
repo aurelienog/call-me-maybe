@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-import numpy as np
+import numpy as np  # type: ignore
 from pydantic import BaseModel, ConfigDict
 
 from .vocabulary_compiler import CompiledVocabulary
 from .json_function_call_dfa import JsonFunctionCallDFA
-from .json_grammar import JsonGrammar
 from .char_dfa import CharDFA, CharState
 
 
 class GrammarCompiler(BaseModel):
     """
-    Compila la gramática JSON y el vocabulario en un DFA optimizado a nivel de tokens.
+    Compiler that transforms a JSON grammar and vocabulary
+    into a token-level DFA.
+
+    Fuses the character-level state machine with the model's BPE vocabulary
+    to produce dense numpy matrices optimized for fast logit masking
+    and O(1) state transitions.
     """
 
     model_config = ConfigDict(
@@ -20,22 +24,35 @@ class GrammarCompiler(BaseModel):
 
     def compile(
         self,
-        grammar: JsonGrammar,
         vocabulary: CompiledVocabulary,
         allowed_functions: list[str],
     ) -> JsonFunctionCallDFA:
         """
-        Paso B (Fase 2): Convierte el CharDFA a nivel de caracteres en un TokenDFA.
-        
-        Para cada estado del CharDFA y cada token_id del vocabulario, simula si la
-        cadena del token se consume completamente sin caer en el estado REJECT.
+        Convert the character-level CharDFA into a token-level
+        JsonFunctionCallDFA.
+
+        For each state in the CharDFA and each token_id in the vocabulary,
+        simulates whether the token's character sequence can be consumed
+        without landing in the REJECT state.
+
+        Args:
+            grammar: The input JSON grammar specification.
+            vocabulary: The pre-analyzed compiled vocabulary container.
+            allowed_functions: List of function names permitted
+            by the registry.
+
+        Returns:
+            An immutable JsonFunctionCallDFA instance with precomputed mask
+            and transition matrices.
         """
         char_dfa = CharDFA(allowed_function_names=allowed_functions)
-        
-        # Obtenemos todos los estados válidos del CharDFA (excluyendo el de rechazo)
-        valid_char_states = [state for state in CharState if state != CharState.REJECT]
-        
-        # Mapeo biyectivo de CharState a un ID numérico denso (0..N-1) para indexación rápida
+
+        # Retrieve all valid CharDFA states (excluding the reject state)
+        valid_char_states = [state for state in CharState
+                             if state != CharState.REJECT]
+
+        # Bijective mapping from CharState to a dense numeric ID (0..N-1)
+        # for fast indexing
         state_to_idx: dict[CharState, int] = {
             state: i for i, state in enumerate(valid_char_states)
         }
@@ -46,52 +63,54 @@ class GrammarCompiler(BaseModel):
         num_states = len(valid_char_states)
         vocab_size = vocabulary.vocab_size
 
-        # 1. Matriz de máscaras de validez para Logits: (num_states, vocab_size)
-        # Inicializamos con -inf (inválido por defecto)
+        # 1. Logit validity mask matrix: (num_states, vocab_size)
+        # Initialize with -inf (invalid by default)
         logit_masks = np.full(
             (num_states, vocab_size),
             fill_value=-np.inf,
             dtype=np.float32,
         )
 
-        # 2. Tabla de Transiciones por Token: (num_states, vocab_size) -> next_state_idx
-        # Inicializamos con -1 para indicar transiciones imposibles
+        # 2. Token transition table: (num_states, vocab_size) -> next_state_idx
+        # Initialize with -1 to indicate impossible transitions
         transitions = np.full(
             (num_states, vocab_size),
             fill_value=-1,
             dtype=np.int32,
         )
 
-        # --- FASE DE PLEGADO (SIMULACIÓN TOKEN POR TOKEN) ---
+        # --- FOLDING PHASE (TOKEN-BY-TOKEN SIMULATION) ---
         for char_state in valid_char_states:
             state_idx = state_to_idx[char_state]
 
             for token_id, compiled_token in vocabulary.tokens.items():
                 token_text = compiled_token.normalized_text
 
-                # Caso límite: Tokens vacíos no alteran el estado
+                # Edge case: Empty tokens do not alter state
                 if not token_text:
                     continue
 
-                # Simulación: Consumir la cadena del token carácter a carácter desde char_state
+                # Simulation: Consume token string character by character
+                # starting from char_state
                 end_state = char_dfa.simulate_string(
                     start_state=char_state,
                     text=token_text,
                 )
 
-                # CASO B (VÁLIDO): La cadena se consumió completa y aterrizó en un estado no-REJECT
+                # CASE B (VALID): String consumed completely and landed in a
+                # non-REJECT state
                 if end_state is not None and end_state != CharState.REJECT:
                     end_state_idx = state_to_idx[end_state]
 
-                    # Habilitamos el token sumando 0.0 al logit en la inferencia
+                    # Enable token by adding 0.0 to logit during inference
                     logit_masks[state_idx, token_id] = 0.0
 
-                    # Registramos el estado de destino
+                    # Record destination state
                     transitions[state_idx, token_id] = end_state_idx
 
-                # CASO A (INVÁLIDO): end_state es None o REJECT -> Se mantiene en -inf y -1
+        # CASE A (INVALID): end_state is None or REJECT -> Retains -inf and -1
 
-        # Mapeamos los estados iniciales y finales a sus IDs numéricos
+        # Map initial and accept states to their dense numeric IDs
         start_state_idx = state_to_idx[char_dfa.start_state]
         accept_state_indices = {
             state_to_idx[state]
@@ -99,7 +118,7 @@ class GrammarCompiler(BaseModel):
             if state in state_to_idx
         }
 
-        # Empaquetamos todo en el JsonFunctionCallDFA inmutable
+        # Package everything into an immutable JsonFunctionCallDFA
         return JsonFunctionCallDFA(
             logit_masks=logit_masks,
             transitions=transitions,

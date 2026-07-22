@@ -2,16 +2,16 @@ import sys
 import json
 
 try:
-    from pydantic import ValidationError    # type: ignore
+    from pydantic import ValidationError
 except ImportError:
     print("❌[ERROR] Missing dependency: pydantic")
     print("Install it with: pip install pydantic")
     sys.exit(1)
 
 try:
-    from llm_sdk.llm_sdk import Small_LLM_Model
+    from .llm import Llm
 except ImportError:
-    print("❌[ERROR] Failed to import llm_sdk.")
+    print("❌[ERROR] Failed to import Small_LLM_Model.")
     print("Make sure llm_sdk and its dependencies are installed:")
     print(" - numpy")
     print(" - pydantic")
@@ -29,8 +29,7 @@ from .utils import (
 )
 from .parser import parse
 from .models import FunctionRegistry, FunctionDefinition, Prompt
-from .decoder import ConstrainedDecoder
-from .llm import Llm
+from .decoder.decoder import ConstrainedDecoder
 
 
 def main() -> None:
@@ -59,7 +58,7 @@ def main() -> None:
         registry.load(functions)
 
         print("[INFO] Cargando modelo y vocabulario...")
-        llm: Small_LLM_Model = Llm()
+        llm = Llm()
 
         decoder = ConstrainedDecoder(
             llm=llm,
