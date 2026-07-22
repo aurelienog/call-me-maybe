@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import numpy as np  # type: ignore
+import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from .vocabulary_compiler import CompiledVocabulary
@@ -100,7 +100,7 @@ class GrammarCompiler(BaseModel):
                 # CASE B (VALID): String consumed completely and landed in a
                 # non-REJECT state
                 if end_state is not None and end_state != CharState.REJECT:
-                    end_state_idx = state_to_idx[end_state]
+                    end_state_idx = state_to_idx[CharState(end_state)]
 
                     # Enable token by adding 0.0 to logit during inference
                     logit_masks[state_idx, token_id] = 0.0

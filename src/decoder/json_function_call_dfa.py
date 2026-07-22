@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import numpy as np  # type: ignore
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from .char_dfa import CharState
+from typing import cast
 
 
 class JsonFunctionCallDFA(BaseModel):
@@ -33,11 +34,11 @@ class JsonFunctionCallDFA(BaseModel):
 
     # Matrix (num_states, vocab_size) of type float32
     # (contains 0.0 for valid, -inf for invalid)
-    logit_masks: np.ndarray
+    logit_masks: np.typing.NDArray[np.float32]
 
     # Matrix (num_states, vocab_size) of type int32
     # containing the next state ID
-    transitions: np.ndarray
+    transitions: np.typing.NDArray[np.int32]
 
     start_state: int
     accept_states: set[int]
@@ -55,7 +56,7 @@ class JsonFunctionCallDFA(BaseModel):
         """
         return state in self.accept_states
 
-    def get_mask(self, state: int) -> np.ndarray:
+    def get_mask(self, state: int) -> np.typing.NDArray[np.float32]:
         """
         Return the logit mask vector for the given state in O(1) time.
 
@@ -65,7 +66,7 @@ class JsonFunctionCallDFA(BaseModel):
         Returns:
             A 1D numpy array of shape (vocab_size,) with logit additive masks.
         """
-        return self.logit_masks[state]
+        return cast(np.typing.NDArray[np.float32], self.logit_masks[state])
 
     def next_state(self, current_state: int, token_id: int) -> int:
         """

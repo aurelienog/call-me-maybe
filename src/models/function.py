@@ -65,7 +65,10 @@ class FunctionDefinition(BaseModel):
     returns: ReturnDefinition
 
     @classmethod
-    def validate_many(cls, data: list[dict]) -> list["FunctionDefinition"]:
+    def validate_many(
+        cls,
+        data: list[dict[str, 'FunctionDefinition']]
+    ) -> list["FunctionDefinition"]:
         """
         Validate and convert multiple function definitions.
 

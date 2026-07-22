@@ -57,7 +57,7 @@ def main() -> None:
         functions = FunctionDefinition.validate_many(functions_data)
         registry.load(functions)
 
-        print("[INFO] Cargando modelo y vocabulario...")
+        print("[INFO] Loading model and vocabulary...")
         llm = Llm()
 
         decoder = ConstrainedDecoder(
@@ -87,14 +87,14 @@ def main() -> None:
         return
 
     try:
-        print(f"[INFO] Procesando {len(prompts)} prompts...")
+        print(f"[INFO] Processing {len(prompts)} prompts...")
         results = decoder.run(prompts)
 
         save_json(
             args.output,
             [result.model_dump() for result in results],
         )
-        print(f"[SUCCESS] Resultados guardados exitosamente en: {args.output}")
+        print(f"[SUCCESS]Results successfully saved to: {args.output}")
 
     except json.JSONDecodeError as e:
         print(f"[INVALID JSON] {e}")

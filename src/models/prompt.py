@@ -18,7 +18,7 @@ class Prompt(BaseModel):
     prompt: str
 
     @classmethod
-    def validate_many(cls, data: list[dict]) -> list["Prompt"]:
+    def validate_many(cls, data: list[dict[str, 'Prompt']]) -> list["Prompt"]:
         """
         Validate and convert multiple prompts.
 

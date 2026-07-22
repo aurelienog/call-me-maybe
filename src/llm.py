@@ -1,7 +1,8 @@
 from llm_sdk.llm_sdk import Small_LLM_Model
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
 
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 from .utils import load_json
 
 
@@ -37,7 +38,7 @@ class Llm(BaseModel):
 
     def model_post_init(
         self,
-        __context,
+        __context: Any,
     ) -> None:
         """
         Initialize tokenizer lookup tables.
@@ -46,6 +47,7 @@ class Llm(BaseModel):
         between token ids, raw tokenizer tokens, and their
         normalized representations.
         """
+        super().model_post_init(__context)
 
         vocab_path = self.model.get_path_to_vocab_file()
 
@@ -95,13 +97,13 @@ class Llm(BaseModel):
         Returns:
             The decoded text.
         """
-
-        return self.model.decode(ids)
+        decoded_text = self.model.decode(ids)
+        return str(decoded_text)
 
     def get_logits(
         self,
         input_ids: list[int],
-    ) -> np.ndarray:
+    ) -> np.typing.NDArray[np.float32]:
         """
         Compute next-token logits.
 

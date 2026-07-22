@@ -44,6 +44,6 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse(arguments: list[str] | None = None):
+def parse(arguments: list[str] | None = None) -> argparse.Namespace:
     parser = create_parser()
     return parser.parse_args(arguments)
