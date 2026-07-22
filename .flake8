@@ -1,0 +1,6 @@
+[flake8]
+exclude =
+    data,
+    llm_sdk,
+    tests,
+    .venv
