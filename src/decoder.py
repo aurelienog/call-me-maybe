@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
@@ -30,6 +31,7 @@ class ConstrainedDecoder(BaseModel):
         Procesa una lista de prompts en lote, compilando el DFA una sola vez
         y mostrando el progreso por consola.
         """
+        start_time = time.perf_counter()
         results: list[FunctionCallResult] = []
 
         # 1. Compilamos el vocabulario y el DFA UNA SOLA VEZ para todo el lote
@@ -56,7 +58,19 @@ class ConstrainedDecoder(BaseModel):
             
             print(f"   └─ Function Selected: {result.name}")
             results.append(result)
+        
+        elapsed_time = time.perf_counter() - start_time
 
+        # Formatear el tiempo de forma legible (minutos y segundos)
+        minutes = int(elapsed_time // 60)
+        seconds = elapsed_time % 60
+
+        print("\n" + "=" * 50)
+        if minutes > 0:
+            print(f"[TIMING] Proceso completado en: {minutes}m {seconds:.2f}s")
+        else:
+            print(f"[TIMING] Proceso completado en: {seconds:.2f}s")
+        print("=" * 50 + "\n")
         return results
 
     def decode_prompt(
