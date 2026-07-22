@@ -1,5 +1,5 @@
-from llm_sdk.llm_sdk import Small_LLM_Model      # type: ignore
-import numpy as np                              # type: ignore
+from llm_sdk.llm_sdk import Small_LLM_Model
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from .utils import load_json
@@ -8,6 +8,11 @@ from .utils import load_json
 class Llm(BaseModel):
     """
     Thin wrapper around the provided LLM SDK.
+
+    Exposes a simplified interface for tokenization,
+    decoding, and next-token prediction while caching
+    the tokenizer vocabulary for efficient constrained
+    decoding.
     """
 
     model_config = ConfigDict(
@@ -35,7 +40,11 @@ class Llm(BaseModel):
         __context,
     ) -> None:
         """
-        Load the tokenizer vocabulary once.
+        Initialize tokenizer lookup tables.
+
+        Loads the tokenizer vocabulary and builds mappings
+        between token ids, raw tokenizer tokens, and their
+        normalized representations.
         """
 
         vocab_path = self.model.get_path_to_vocab_file()
@@ -58,6 +67,12 @@ class Llm(BaseModel):
     ) -> list[int]:
         """
         Encode text into token ids.
+
+        Args:
+            text: Input text.
+
+        Returns:
+            A list of token ids.
         """
 
         ids = self.model.encode(text)
@@ -73,6 +88,12 @@ class Llm(BaseModel):
     ) -> str:
         """
         Decode token ids into text.
+
+        Args:
+            ids: Token ids to decode.
+
+        Returns:
+            The decoded text.
         """
 
         return self.model.decode(ids)
@@ -83,6 +104,13 @@ class Llm(BaseModel):
     ) -> np.ndarray:
         """
         Compute next-token logits.
+
+        Args:
+            input_ids: Input token ids.
+
+        Returns:
+            A NumPy array containing the logits for the next
+            predicted token.
         """
 
         logits = self.model.get_logits_from_input_ids(
@@ -99,7 +127,13 @@ class Llm(BaseModel):
         token_id: int,
     ) -> str:
         """
-        Raw tokenizer token.
+        Return the raw tokenizer token for a token id.
+
+        Args:
+            token_id: Token identifier.
+
+        Returns:
+            The corresponding tokenizer token.
         """
 
         return self.id_to_token[token_id]
@@ -109,7 +143,13 @@ class Llm(BaseModel):
         token_id: int,
     ) -> str:
         """
-        Normalized tokenizer token.
+        Return the normalized token for a token id.
+
+        Args:
+            token_id: Token identifier.
+
+        Returns:
+            The normalized token representation.
         """
 
         return self.normalized_vocabulary[token_id]
@@ -119,7 +159,16 @@ class Llm(BaseModel):
         token: str,
     ) -> str:
         """
-        Replace tokenizer-specific whitespace markers by ordinary spaces.
+        Normalize a tokenizer token.
+
+        Replaces tokenizer-specific whitespace markers with
+        their corresponding standard whitespace characters.
+
+        Args:
+            token: Raw tokenizer token.
+
+        Returns:
+            The normalized token.
         """
 
         return (
