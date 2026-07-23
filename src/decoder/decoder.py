@@ -65,13 +65,12 @@ class ConstrainedDecoder(BaseModel):
         for index, prompt_model in enumerate(prompts, start=1):
             prompt_text = prompt_model.prompt
             print(f"[{index}/{total}] Processing: '{prompt_text}'")
-
             result = self._decode_single_prompt(
                 prompt_text=prompt_text,
                 dfa=dfa,
             )
-
             print(f"   └─ Function Selected: {result.name}")
+            print(f"        └─ Parameters Selected: {result.parameters}")
             results.append(result)
         return results
 
