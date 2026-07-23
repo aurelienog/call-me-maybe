@@ -155,7 +155,7 @@ class FunctionRegistry(BaseModel):
         lines.append("Instructions:")
         lines.append("- Output strictly valid JSON with keys 'name'"
                      "and 'parameters'.")
-        lines.append("- For regex patterns, avoid unnecessary capture groups"
+        lines.append("- For regex patterns:"
                      "e.g. use [0-9]+ instead of ([0-9]+).")
 
         return "\n".join(lines)
