@@ -10,6 +10,7 @@ from .vocabulary_compiler import VocabularyCompiler
 from .grammar_compiler import GrammarCompiler
 from .json_function_call_dfa import JsonFunctionCallDFA
 from ..utils import timer
+from .visualizer import GenerationVisualizer
 
 
 class ConstrainedDecoder(BaseModel):
@@ -32,6 +33,8 @@ class ConstrainedDecoder(BaseModel):
     registry: FunctionRegistry
     vocab_compiler: VocabularyCompiler = VocabularyCompiler()
     grammar_compiler: GrammarCompiler = GrammarCompiler()
+
+    verbose: bool = False
 
     def run(self, prompts: list[Prompt]) -> list[FunctionCallResult]:
         """
@@ -106,7 +109,10 @@ class ConstrainedDecoder(BaseModel):
         generated_token_ids: list[int] = []
         current_state = dfa.start_state
 
-        for _ in range(max_new_tokens):
+        if self.verbose:
+            GenerationVisualizer.print_header(prompt_text)
+
+        for step in range(1, max_new_tokens + 1):
             if dfa.is_accept_state(current_state):
                 break
 
@@ -120,6 +126,7 @@ class ConstrainedDecoder(BaseModel):
 
             # C. Greedy selection (Argmax)
             selected_token_id = int(np.argmax(masked_logits))
+            norm_token = self.llm.normalized_token(selected_token_id)
 
             # D. Advance state transition in automaton
             try:
@@ -132,9 +139,25 @@ class ConstrainedDecoder(BaseModel):
                 break
 
             generated_token_ids.append(selected_token_id)
-
+            if self.verbose:
+                current_stream = self.llm.decode(generated_token_ids)
+                GenerationVisualizer.print_step(
+                    step=step,
+                    current_state=current_state,
+                    next_state=current_state,
+                    raw_logits=logits,
+                    masked_logits=masked_logits,
+                    mask=mask,
+                    selected_token_id=selected_token_id,
+                    normalized_token=norm_token,
+                    current_stream_text=current_stream,
+                    token_lookup=self.llm.normalized_token,
+                )
         # 4. Decode generated token IDs into text and structure output result
         generated_json_str = self.llm.decode(generated_token_ids)
+
+        if self.verbose:
+            GenerationVisualizer.print_footer(generated_json_str)
 
         return self._parse_output(
             prompt=prompt_text,
