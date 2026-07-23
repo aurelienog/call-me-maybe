@@ -33,7 +33,6 @@ class ConstrainedDecoder(BaseModel):
     vocab_compiler: VocabularyCompiler = VocabularyCompiler()
     grammar_compiler: GrammarCompiler = GrammarCompiler()
 
-    @timer
     def run(self, prompts: list[Prompt]) -> list[FunctionCallResult]:
         """
         Process a batch of prompts, compiling the DFA once
@@ -46,7 +45,6 @@ class ConstrainedDecoder(BaseModel):
             List of FunctionCallResult objects containing
             extracted function calls.
         """
-        results: list[FunctionCallResult] = []
 
         print("[INFO] Compiling token-level graph and DFA...")
         compiled_vocab = self.vocab_compiler.compile(
@@ -56,7 +54,13 @@ class ConstrainedDecoder(BaseModel):
             vocabulary=compiled_vocab,
             allowed_functions=self.registry.function_names(),
         )
+        return self._process_all_prompts(prompts, dfa)
 
+    @timer
+    def _process_all_prompts(
+            self, prompts: list[Prompt], dfa
+    ) -> list[FunctionCallResult]:
+        results: list[FunctionCallResult] = []
         total = len(prompts)
         for index, prompt_model in enumerate(prompts, start=1):
             prompt_text = prompt_model.prompt
@@ -69,7 +73,6 @@ class ConstrainedDecoder(BaseModel):
 
             print(f"   └─ Function Selected: {result.name}")
             results.append(result)
-
         return results
 
     def _decode_single_prompt(
