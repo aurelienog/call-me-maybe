@@ -58,7 +58,7 @@ class ConstrainedDecoder(BaseModel):
 
     @timer
     def _process_all_prompts(
-            self, prompts: list[Prompt], dfa
+            self, prompts: list[Prompt], dfa: JsonFunctionCallDFA
     ) -> list[FunctionCallResult]:
         results: list[FunctionCallResult] = []
         total = len(prompts)

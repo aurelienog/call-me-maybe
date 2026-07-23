@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, ValidationInfo
 
 from .types import JsonType
 
@@ -84,3 +84,42 @@ class FunctionDefinition(BaseModel):
                 do not match the expected schema.
         """
         return [cls.model_validate(item) for item in data]
+
+    @field_validator("name", "parameters", mode="after")
+    @classmethod
+    def validate_non_empty_identifiers(
+        cls,
+        value: str | dict[str, ParameterDefinition],
+        info: ValidationInfo,
+    ) -> str | dict[str, ParameterDefinition]:
+        """
+        Validate that the function name and all parameter keys are
+        non-empty strings.
+
+        Args:
+            value: The field value being validated (str for 'name', dict for
+            'parameters').
+            info: Contextual information about the field being validated.
+
+        Returns:
+            The validated field value.
+
+        Raises:
+            ValueError: If the string value or any dict key is empty or
+            whitespace-only.
+        """
+        if info.field_name == "name":
+            if isinstance(value, str) and not value.strip():
+                raise ValueError("Function name cannot be empty or"
+                                 " whitespace-only.")
+
+        elif info.field_name == "parameters":
+            if isinstance(value, dict):
+                for param_name in value:
+                    if not param_name.strip():
+                        raise ValueError(
+                            "Parameter name cannot be empty or"
+                            f" whitespace-only: {param_name!r}"
+                        )
+
+        return value

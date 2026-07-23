@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Prompt(BaseModel):
@@ -16,6 +16,26 @@ class Prompt(BaseModel):
     """
     model_config = ConfigDict(extra="forbid")
     prompt: str
+
+    @field_validator("prompt", mode="after")
+    @classmethod
+    def validate_non_empty_prompt(cls, value: str) -> str:
+        """
+        Validate that the prompt text is non-empty and non-whitespace.
+
+        Args:
+            value: The prompt text string.
+
+        Returns:
+            The validated prompt text.
+
+        Raises:
+            ValueError: If the prompt is empty or consists only of whitespace.
+        """
+        if not value.strip():
+            raise ValueError("Prompt text cannot be empty or consist only "
+                             "of whitespace.")
+        return value
 
     @classmethod
     def validate_many(cls, data: list[dict[str, 'Prompt']]) -> list["Prompt"]:

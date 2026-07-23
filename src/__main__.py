@@ -4,14 +4,14 @@ import json
 try:
     from pydantic import ValidationError
 except ImportError:
-    print("❌[ERROR] Missing dependency: pydantic")
+    print("❌ [ERROR] Missing dependency: pydantic")
     print("Install it with: pip install pydantic")
     sys.exit(1)
 
 try:
     from .llm import Llm
 except ImportError:
-    print("❌[ERROR] Failed to import Small_LLM_Model.")
+    print("❌ [ERROR] Failed to import Small_LLM_Model.")
     print("Make sure llm_sdk and its dependencies are installed:")
     print(" - numpy")
     print(" - pydantic")
@@ -54,8 +54,15 @@ def main() -> None:
         validate_output_file(args.output)
 
         functions_data = load_json(args.functions_definition)
+        if not isinstance(functions_data, list):
+            raise ValueError("Functions definition JSON must contain a top-level list/array.")
         functions = FunctionDefinition.validate_many(functions_data)
         registry.load(functions)
+
+        prompts_data = load_json(args.input)
+        if not isinstance(prompts_data, list):
+            raise ValueError("Input prompts JSON must contain a top-level list/array.")
+        prompts = Prompt.validate_many(prompts_data)
 
         print("[INFO] Loading model and vocabulary...")
         llm = Llm()
@@ -65,25 +72,22 @@ def main() -> None:
             registry=registry,
         )
 
-        prompts_data = load_json(args.input)
-        prompts = Prompt.validate_many(prompts_data)
-
     except OSError as e:
-        print(f"[SYSTEM ERROR] {e}")
+        print(f"❌ [SYSTEM ERROR] {e}")
         return
 
     except json.JSONDecodeError as e:
-        print(f"[INVALID JSON] {e}")
+        print(f"❌ [INVALID JSON] {e}")
         return
 
     except ValidationError as e:
-        print("[VALIDATION ERROR]")
+        print("❌ [VALIDATION ERROR]")
         print("The input JSON does not match the expected schema.")
         print(e)
         return
 
-    except ValueError as e:
-        print(f"[ERROR] {e}")
+    except (ValueError, TypeError) as e:
+        print(f"❌ [ERROR] {e}")
         return
 
     try:
@@ -94,16 +98,16 @@ def main() -> None:
             args.output,
             [result.model_dump() for result in results],
         )
-        print(f"[SUCCESS]Results successfully saved to: {args.output}")
+        print(f"[SUCCESS] Results successfully saved to: {args.output}")
 
     except json.JSONDecodeError as e:
-        print(f"[INVALID JSON] {e}")
+        print(f"❌ [INVALID JSON] {e}")
 
     except OSError as e:
-        print(f"[SYSTEM ERROR] {e}")
+        print(f"❌ [SYSTEM ERROR] {e}")
 
     except Exception as e:
-        print(f"[PROCESS ERROR] {e}")
+        print(f"❌ [PROCESS ERROR] {e}")
 
 
 if __name__ == "__main__":
